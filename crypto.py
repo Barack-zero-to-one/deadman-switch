@@ -21,6 +21,8 @@ _ITERATIONS: int = 480_000
 
 def derive_key(password: str, salt: bytes) -> bytes:
     """Derive a 256-bit AES key from a master password using PBKDF2HMAC-SHA256."""
+    if not password:
+        raise ValueError("Master password must not be empty.")
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=_KEY_BYTES,

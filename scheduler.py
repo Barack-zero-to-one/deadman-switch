@@ -16,7 +16,10 @@ def _now() -> datetime:
 
 
 def _parse(dt_str: str) -> datetime:
-    return datetime.strptime(dt_str, _ISO_FORMAT)
+    try:
+        return datetime.strptime(dt_str, _ISO_FORMAT)
+    except ValueError as exc:
+        raise ValueError(f"Deadline format invalide: {dt_str!r}") from exc
 
 
 def _fmt(dt: datetime) -> str:
@@ -59,10 +62,11 @@ def format_countdown(deadline_str: str | None) -> str:
 
 def checkin(cfg: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Record a check-in: update last_checkin and recalculate the deadline.
-    Returns the modified config dict (does not save to disk).
+    Record a check-in: return a new config dict with updated last_checkin and deadline.
+    Does NOT mutate the input dict — does not save to disk.
     """
-    now_str = _fmt(_now())
-    cfg["last_checkin"] = now_str
-    cfg["deadline"] = new_deadline(cfg.get("interval_days", 7))
-    return cfg
+    import copy
+    updated = copy.copy(cfg)
+    updated["last_checkin"] = _fmt(_now())
+    updated["deadline"] = new_deadline(updated.get("interval_days", 7))
+    return updated

@@ -66,7 +66,14 @@ def save_config(cfg: Dict[str, Any], password: str) -> None:
         os.write(fd, blob)
     finally:
         os.close(fd)
-    os.replace(tmp_path, _VAULT_FILE)
+    try:
+        os.replace(tmp_path, _VAULT_FILE)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 def default_config() -> Dict[str, Any]:

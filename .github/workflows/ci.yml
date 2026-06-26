@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          python -c "
+          from crypto import encrypt_config, decrypt_config
+          from scheduler import new_deadline, is_triggered, checkin
+          from config_manager import default_config
+          import json
+
+          pwd = 'testpassword123'
+          data = b'config test'
+
+          # AES-256-GCM round-trip
+          blob = encrypt_config(data, pwd)
+          assert decrypt_config(blob, pwd) == data
+          print('OK  AES-256-GCM round-trip')
+
+          # Wrong password raises ValueError
+          try:
+              decrypt_config(blob, 'wrong')
+              assert False, 'should have raised'
+          except ValueError:
+              print('OK  wrong password raises ValueError')
+
+          # Empty password raises ValueError
+          try:
+              encrypt_config(data, '')
+              assert False, 'should have raised'
+          except ValueError:
+              print('OK  empty password raises ValueError')
+
+          # Scheduler: future deadline not triggered
+          assert not is_triggered(new_deadline(7))
+          print('OK  future deadline not triggered')
+
+          # Scheduler: past deadline triggered
+          assert is_triggered('2020-01-01T00:00:00')
+          print('OK  past deadline triggered')
+
+          # Scheduler: None deadline not triggered
+          assert not is_triggered(None)
+          print('OK  None deadline not triggered')
+
+          # checkin returns new dict without mutating original
+          cfg = default_config()
+          cfg['deadline'] = '2020-01-01T00:00:00'
+          new_cfg = checkin(cfg)
+          assert not is_triggered(new_cfg['deadline'])
+          assert cfg['deadline'] == '2020-01-01T00:00:00', 'original must be unchanged'
+          print('OK  checkin does not mutate original cfg')
+
+          # JSON round-trip through encryption
+          raw = json.dumps(default_config()).encode()
+          cfg2 = json.loads(decrypt_config(encrypt_config(raw, pwd), pwd))
+          assert cfg2['interval_days'] == 7
+          print('OK  JSON config round-trip')
+
+          print()
+          print('All tests passed.')
+          "

@@ -110,7 +110,10 @@ def _wizard(password: str) -> dict:
     print(f"\n  {BOLD}{C}Configuration SMTP (pour l'envoi automatique d'emails){RST}")
     _hr()
     cfg["smtp"]["host"]     = _prompt("Serveur SMTP", "smtp.gmail.com")
-    cfg["smtp"]["port"]     = int(_prompt("Port", "587"))
+    try:
+        cfg["smtp"]["port"] = int(_prompt("Port", "587"))
+    except ValueError:
+        cfg["smtp"]["port"] = 587
     cfg["smtp"]["user"]     = _prompt("Email expéditeur")
     cfg["smtp"]["password"] = _prompt_password("Mot de passe email / App Password")
 
@@ -186,10 +189,15 @@ def _flow_smtp(cfg: dict, password: str) -> dict:
     _show_banner()
     print(f"  {BOLD}{G}[ CONFIGURER SMTP ]{RST}\n")
     _hr()
-    cfg["smtp"]["host"]     = _prompt("Serveur SMTP", cfg["smtp"].get("host", "smtp.gmail.com"))
-    cfg["smtp"]["port"]     = int(_prompt("Port", str(cfg["smtp"].get("port", 587))))
-    cfg["smtp"]["user"]     = _prompt("Email expéditeur", cfg["smtp"].get("user", ""))
-    cfg["smtp"]["password"] = _prompt_password("Mot de passe / App Password")
+    cfg["smtp"]["host"] = _prompt("Serveur SMTP", cfg["smtp"].get("host", "smtp.gmail.com"))
+    try:
+        cfg["smtp"]["port"] = int(_prompt("Port", str(cfg["smtp"].get("port", 587))))
+    except ValueError:
+        cfg["smtp"]["port"] = 587
+    cfg["smtp"]["user"] = _prompt("Email expéditeur", cfg["smtp"].get("user", ""))
+    new_pwd = _prompt_password("Mot de passe / App Password (laisser vide = conserver l'actuel)")
+    if new_pwd:
+        cfg["smtp"]["password"] = new_pwd
     save_config(cfg, password)
     _log("OK", "SMTP mis à jour.")
     _pause()
@@ -241,7 +249,7 @@ def _flow_test(cfg: dict) -> None:
     _pause()
 
 
-def _auto_trigger(cfg: dict) -> None:
+def _auto_trigger(cfg: dict, password: str) -> None:
     """Called automatically if the deadline has passed. Sends all messages and exits."""
     _show_banner()
     print(f"  {BOLD}{R}[ DÉCLENCHEMENT AUTOMATIQUE ]{RST}\n")
@@ -257,9 +265,17 @@ def _auto_trigger(cfg: dict) -> None:
         for err in errors:
             _log("ERR", err)
 
+    # Reset deadline so the next launch shows the menu instead of re-triggering.
+    try:
+        updated = checkin(cfg)
+        save_config(updated, password)
+        _log("INFO", f"Prochaine deadline réinitialisée: {updated['deadline']}")
+    except Exception as exc:
+        _log("WARN", f"Impossible de réinitialiser le timer: {exc}")
+
     _hr()
-    print(f"\n  {DIM}  Le switch s'est déclenché. Relancez l'application pour faire un check-in.{RST}\n")
-    sys.exit(0)
+    print(f"\n  {DIM}  Relancez l'application pour faire un check-in et réactiver le switch.{RST}\n")
+    sys.exit(1 if errors else 0)
 
 
 def _print_menu(cfg: dict) -> None:
@@ -302,9 +318,19 @@ def main() -> None:
         except ValueError:
             print(f"\n  {BOLD}{R}Mot de passe incorrect ou vault corrompu.{RST}\n")
             sys.exit(1)
+        except OSError as exc:
+            print(f"\n  {BOLD}{R}Impossible de lire le vault: {exc}{RST}\n")
+            sys.exit(1)
 
-    if is_triggered(cfg.get("deadline")):
-        _auto_trigger(cfg)
+    try:
+        triggered = is_triggered(cfg.get("deadline"))
+    except ValueError as exc:
+        print(f"\n  {BOLD}{R}Deadline corrompue dans le vault: {exc}{RST}")
+        print(f"  {DIM}Faites un check-in manuel pour réinitialiser.{RST}\n")
+        triggered = False
+
+    if triggered:
+        _auto_trigger(cfg, password)
 
     handlers = {
         "1": lambda: _flow_checkin(cfg, password),

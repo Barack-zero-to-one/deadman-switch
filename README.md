@@ -131,4 +131,4 @@ deadman-switch/
 
 ---
 
-*CODED BY BARACK OS — If I disappear, the truth gets out.*
+*CODED BY BARACK OS  If I disappear, the truth gets out.*

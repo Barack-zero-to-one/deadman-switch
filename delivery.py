@@ -48,6 +48,7 @@ def send_messages(cfg: Dict[str, Any]) -> List[str]:
         with smtplib.SMTP(host, port, timeout=15) as server:
             server.ehlo()
             server.starttls()
+            server.ehlo()  # RFC 3207 §3: re-issue EHLO after TLS to refresh capability list
             server.login(user, password)
             for recipient in recipients:
                 for message in messages:
